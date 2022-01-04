@@ -1,0 +1,63 @@
+commit 12179aaa07ce9571cda2d129a50bde75a0ac267e
+Author: Kohei Futatsuka <futahei1108@icloud.com>
+Date:   Wed Jan 5 03:11:21 2022 +0900
+
+    Add some options for play method about Animation (#3021)
+    
+    * add play once method
+    
+    * add test
+    
+    * add doc
+    
+    * add test
+    
+    * fix
+    
+    * fix playOnce test
+    
+    * add options for play method
+    
+    * fix test
+    
+    * fix default repetitions
+    
+    * update docs
+    
+    * fix default options
+    
+    * change logic
+    
+    * del unnecessary method call
+    
+    * fix
+    
+    * fix
+    
+    * update test
+    
+    * del
+    
+    * revert
+    
+    * fix
+    
+    * update logic
+    
+    * add event (draft)
+    
+    * add e.detail to loop
+    
+    * add docs
+    
+    * add test
+    
+    * fix
+    
+    * use Punch anime
+    
+    * wait for test finished
+    
+    * passed test
+    
+    * fix
