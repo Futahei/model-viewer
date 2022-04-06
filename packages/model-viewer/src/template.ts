@@ -202,18 +202,17 @@ canvas.show {
   align-items: center;
   justify-content: center;
 
-  opacity: 0;
-  will-change: opacity;
   overflow: hidden;
-  transition: opacity 0.3s;
 }
 
-.slot.interaction-prompt.visible {
+.slot.interaction-prompt> .animated-container.visible {
   opacity: 1;
 }
 
 .slot.interaction-prompt > .animated-container {
   will-change: transform, opacity;
+  opacity: 0;
+  transition: opacity 0.3s;
 }
 
 .slot.interaction-prompt > * {
@@ -318,7 +317,6 @@ canvas.show {
           <canvas></canvas>
         </slot>
       </div>
-      
   </div>
 
   <!-- NOTE(cdata): We need to wrap slots because browsers without ShadowDOM
@@ -347,9 +345,17 @@ canvas.show {
   </div>
 
   <div class="slot interaction-prompt">
-    <div class="animated-container">
+    <div id="prompt" class="animated-container">
       <slot name="interaction-prompt" aria-hidden="true">
         ${ControlsPrompt}
+      </slot>
+    </div>
+    <div id="finger0" class="animated-container">
+      <slot name="finger0" aria-hidden="true">
+      </slot>
+    </div>
+    <div id="finger1" class="animated-container">
+      <slot name="finger1" aria-hidden="true">
       </slot>
     </div>
   </div>

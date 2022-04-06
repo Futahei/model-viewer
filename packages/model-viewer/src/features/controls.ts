@@ -24,7 +24,7 @@ import {IdentNode, NumberNode, numberNode, parseExpressions} from '../styles/par
 import {DECAY_MILLISECONDS} from '../three-components/Damper.js';
 import {ChangeEvent, ChangeSource, PointerChangeEvent, SmoothControls} from '../three-components/SmoothControls.js';
 import {Constructor} from '../utilities.js';
-import {timeline} from '../utilities/animation.js';
+import {Frame, timeline, TimingFunction} from '../utilities/animation.js';
 
 
 // NOTE(cdata): The following "animation" timing functions are deliberately
@@ -34,7 +34,7 @@ import {timeline} from '../utilities/animation.js';
 const PROMPT_ANIMATION_TIME = 5000;
 
 // For timing purposes, a "frame" is a timing agnostic relative unit of time
-// and a "value" is a target value for the keyframe.
+// and a "value" is a target value for the Frame.
 const wiggle = timeline(0, [
   {frames: 5, value: -1},
   {frames: 1, value: -1},
@@ -77,6 +77,11 @@ export interface SphericalPosition {
   phi: number;    // polar angle from the y (up) axis.
   radius: number;
   toString(): string;
+}
+
+export interface Finger {
+  x: Frame[];
+  y: Frame[];
 }
 
 export type InteractionPromptStrategy = 'auto'|'when-focused'|'none';
@@ -200,9 +205,9 @@ const QUARTER_PI = HALF_PI / 2.0;
 const TAU = 2.0 * Math.PI;
 
 export const $controls = Symbol('controls');
-export const $promptElement = Symbol('promptElement');
 export const $panElement = Symbol('panElement');
 export const $promptAnimatedContainer = Symbol('promptAnimatedContainer');
+export const $fingerAnimatedContainers = Symbol('fingerAnimatedContainers');
 
 const $deferInteractionPrompt = Symbol('deferInteractionPrompt');
 const $updateAria = Symbol('updateAria');
@@ -262,6 +267,7 @@ export declare interface ControlsInterface {
   updateFraming(): Promise<void>;
   resetInteractionPrompt(): void;
   zoom(keyPresses: number): void;
+  interact(duration: number, finger0: Finger, finger1: Finger): void;
 }
 
 export const ControlsMixin = <T extends Constructor<ModelViewerElementBase>>(
@@ -357,11 +363,12 @@ export const ControlsMixin = <T extends Constructor<ModelViewerElementBase>>(
 
     @property({type: String, attribute: 'bounds'}) bounds: Bounds = 'legacy';
 
-    protected[$promptElement] =
-        this.shadowRoot!.querySelector('.interaction-prompt') as HTMLElement;
     protected[$promptAnimatedContainer] =
-        this.shadowRoot!.querySelector(
-            '.interaction-prompt > .animated-container') as HTMLElement;
+      this.shadowRoot!.querySelector('#prompt') as HTMLElement;
+    protected[$fingerAnimatedContainers]: HTMLElement[] = [
+      this.shadowRoot!.querySelector('#finger0')!,
+      this.shadowRoot!.querySelector('#finger1')!
+    ];
     protected[$panElement] =
         this.shadowRoot!.querySelector('.pan-target') as HTMLElement;
 
@@ -513,12 +520,6 @@ export const ControlsMixin = <T extends Constructor<ModelViewerElementBase>>(
         }
       }
 
-      if (changedProperties.has('interactionPromptStyle')) {
-        this[$promptElement].classList.toggle(
-            'wiggle',
-            this.interactionPromptStyle === InteractionPromptStyle.WIGGLE);
-      }
-
       if (changedProperties.has('interactionPolicy')) {
         const interactionPolicy = this.interactionPolicy;
         controls.applyOptions({interactionPolicy});
@@ -564,6 +565,72 @@ export const ControlsMixin = <T extends Constructor<ModelViewerElementBase>>(
       this.requestUpdate('minCameraOrbit');
       this.requestUpdate('maxCameraOrbit');
       await this.requestUpdate('cameraOrbit');
+    }
+
+    interact(duration: number, finger0: Finger, finger1?: Finger) {
+      const inputElement = this[$userInputElement];
+      const fingerElements = this[$fingerAnimatedContainers];
+      const CENTER = 0.5;
+
+      const xy = new Array<{x: TimingFunction, y: TimingFunction}>();
+      xy.push({x: timeline(CENTER, finger0.x), y: timeline(CENTER, finger0.y)});
+      const positions = [{x: 0, y: 0}];
+
+      if (finger1 != null) {
+        xy.push(
+            {x: timeline(CENTER, finger1.x), y: timeline(CENTER, finger1.y)});
+        positions.push({x: 0, y: 0});
+      }
+
+      const startTime = performance.now();
+      const {width, height} = this[$scene];
+
+      const dispatchTouches = (type: string) => {
+        const touches: Touch[] = [];
+        for (const [i, position] of positions.entries()) {
+          touches.push(new Touch({
+            identifier: i,
+            target: inputElement,
+            clientX: width * position.x,
+            clientY: height * position.y
+          }));
+          const {style} = fingerElements[i];
+          style.transform = `translateX(${width * position.x}px) translateY(${
+              height * position.y}px)`;
+          if (type === 'touchstart') {
+            style.opacity = '1';
+          } else if (type === 'touchend') {
+            style.opacity = '0';
+          }
+        }
+        const init = {
+          touches: type === 'touchend' ? [] : touches,
+          targetTouches: type === 'touchend' ? [] : touches,
+          changedTouches: touches,
+          altKey: true  // flag that this is not a user interaction
+        };
+        inputElement.dispatchEvent(new TouchEvent(type, init));
+      };
+
+      const moveTouches = () => {
+        const time = Math.min(1, (performance.now() - startTime) / duration);
+        for (const [i, position] of positions.entries()) {
+          position.x = xy[i].x(time) - CENTER;
+          position.y = xy[i].y(time) - CENTER;
+        }
+
+        dispatchTouches('touchmove');
+
+        if (time < 1) {
+          requestAnimationFrame(moveTouches);
+        } else {
+          dispatchTouches('touchend');
+        }
+      };
+
+      dispatchTouches('touchstart');
+
+      requestAnimationFrame(moveTouches);
     }
 
     [$syncFieldOfView](style: EvaluatedStyle<Intrinsics<['rad']>>) {
@@ -640,7 +707,7 @@ export const ControlsMixin = <T extends Constructor<ModelViewerElementBase>>(
           this[$waitingToPromptUser] = false;
           this[$promptElementVisibleTime] = now;
 
-          this[$promptElement].classList.add('visible');
+          this[$promptAnimatedContainer].classList.add('visible');
         }
       }
 
@@ -675,7 +742,7 @@ export const ControlsMixin = <T extends Constructor<ModelViewerElementBase>>(
     [$deferInteractionPrompt]() {
       // Effectively cancel the timer waiting for user interaction:
       this[$waitingToPromptUser] = false;
-      this[$promptElement].classList.remove('visible');
+      this[$promptAnimatedContainer].classList.remove('visible');
       this[$promptElementVisibleTime] = Infinity;
     }
 
@@ -773,7 +840,7 @@ export const ControlsMixin = <T extends Constructor<ModelViewerElementBase>>(
       }
 
       this[$waitingToPromptUser] = false;
-      this[$promptElement].classList.remove('visible');
+      this[$promptAnimatedContainer].classList.remove('visible');
 
       this[$promptElementVisibleTime] = Infinity;
       this[$focusedTime] = Infinity;

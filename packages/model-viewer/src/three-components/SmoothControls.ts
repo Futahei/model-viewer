@@ -581,8 +581,9 @@ export class SmoothControls extends EventDispatcher {
       const dx = Math.abs(clientX - this.lastPointerPosition.clientX);
       const dy = Math.abs(clientY - this.lastPointerPosition.clientY);
       // If motion is mostly vertical, assume scrolling is the intent.
-      if ((touchAction === 'pan-y' && dy > dx) ||
-          (touchAction === 'pan-x' && dx > dy)) {
+      if (!event.altKey &&
+        ((touchAction === 'pan-y' && dy > dx) ||
+         (touchAction === 'pan-x' && dx > dy))) {
         this.touchMode = null;
         return;
       }
@@ -611,7 +612,6 @@ export class SmoothControls extends EventDispatcher {
   }
 
   private initializePan() {
-    (this.scene.element as any)[$panElement].style.opacity = 1;
     const {theta, phi} = this.spherical;
     const psi = theta - this.scene.yaw;
     this.panPerPixel = PAN_SENSITIVITY / this.scene.height;
@@ -724,6 +724,7 @@ export class SmoothControls extends EventDispatcher {
           (event.button === 2 || event.ctrlKey || event.metaKey ||
            event.shiftKey)) {
         this.initializePan();
+        (this.scene.element as any)[$panElement].style.opacity = 1;
       }
       this.lastPointerPosition.clientX = event.clientX;
       this.lastPointerPosition.clientY = event.clientY;
@@ -771,6 +772,9 @@ export class SmoothControls extends EventDispatcher {
         this.touchDecided = true;
         if (this.enablePan) {
           this.initializePan();
+          if (!event.altKey) {  // prompt, not user interaction
+            (this.scene.element as any)[$panElement].style.opacity = 1;
+          }
           const x = 0.5 * (targetTouches[0].clientX + targetTouches[1].clientX);
           const y = 0.5 * (targetTouches[0].clientY + targetTouches[1].clientY);
           this.lastPointerPosition.clientX = x;
@@ -809,7 +813,9 @@ export class SmoothControls extends EventDispatcher {
     if (event.targetTouches.length > 0 && this.touchMode !== null) {
       this.onTouchChange(event);
     }
-    if (event.targetTouches.length === 0) {
+    if (event.targetTouches.length === 0 && !event.altKey) {
+      // altKey indicates an interaction prompt; don't reset radius in this case
+      // as it will cause the camera to drift.
       if (this.panPerPixel > 0) {
         this.resetRadius();
       } else {
