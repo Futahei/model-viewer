@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import {AnimationAction, AnimationClip, AnimationMixer, Box3, Camera, Event as ThreeEvent, LoopPingPong, LoopRepeat, Material, Matrix3, Mesh, Object3D, PerspectiveCamera, Raycaster, Scene, Sphere, Vector2, Vector3, WebGLRenderer} from 'three';
+import {AnimationAction, AnimationClip, AnimationMixer, Box3, Camera, Event as ThreeEvent, LoopPingPong, LoopRepeat, Material, Matrix3, Mesh, Object3D, PerspectiveCamera, Raycaster, Scene, Sphere, Texture, Vector2, Vector3, WebGLRenderer} from 'three';
 import {CSS2DRenderer} from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 
 import ModelViewerElementBase, {$renderer, RendererInterface} from '../model-viewer-base.js';
@@ -94,7 +94,6 @@ export class ModelScene extends Scene {
 
   public exposure = 1;
   public canScale = true;
-  public tightBounds = false;
 
   private isDirty = false;
 
@@ -382,24 +381,19 @@ export class ModelScene extends Scene {
 
     this.findBakedShadows(this.modelContainer);
 
-    if (this.tightBounds === true) {
-      const bound = (box: Box3, vertex: Vector3): Box3 => {
-        return box.expandByPoint(vertex);
-      };
-      this.setBakedShadowVisibility(false);
+    const bound = (box: Box3, vertex: Vector3): Box3 => {
+      return box.expandByPoint(vertex);
+    };
+    this.setBakedShadowVisibility(false);
+    this.boundingBox = reduceVertices(this.modelContainer, bound, new Box3());
+    // If there's nothing but the baked shadow, then it's not a baked shadow.
+    if (this.boundingBox.isEmpty()) {
+      this.setBakedShadowVisibility(true);
+      this.bakedShadows.forEach((mesh) => this.unmarkBakedShadow(mesh));
       this.boundingBox = reduceVertices(this.modelContainer, bound, new Box3());
-      // If there's nothing but the baked shadow, then it's not a baked shadow.
-      if (this.boundingBox.isEmpty()) {
-        this.setBakedShadowVisibility(true);
-        this.bakedShadows.forEach((mesh) => this.unmarkBakedShadow(mesh));
-        this.boundingBox =
-            reduceVertices(this.modelContainer, bound, new Box3());
-      }
-      this.checkBakedShadows();
-      this.setBakedShadowVisibility();
-    } else {
-      this.boundingBox.setFromObject(this.modelContainer);
     }
+    this.checkBakedShadows();
+    this.setBakedShadowVisibility();
 
     this.boundingBox.getSize(this.size);
 
@@ -419,13 +413,9 @@ export class ModelScene extends Scene {
     this.setBakedShadowVisibility(false);
     const {center} = this.boundingSphere;
 
-    if (this.tightBounds === true) {
-      this.element.requestUpdate('cameraTarget');
-      await this.element.updateComplete;
-      center.copy(this.getTarget());
-    } else {
-      this.boundingBox.getCenter(center);
-    }
+    this.element.requestUpdate('cameraTarget');
+    await this.element.updateComplete;
+    center.copy(this.getTarget());
 
     const radiusSquared = (value: number, vertex: Vector3): number => {
       return Math.max(value, center!.distanceToSquared(vertex));
@@ -489,6 +479,15 @@ export class ModelScene extends Scene {
     return {width: this.width, height: this.height};
   }
 
+  setEnvironmentAndSkybox(environment: Texture|null, skybox: Texture|null) {
+    if (this.element[$renderer].arRenderer.presentedScene === this) {
+      return;
+    }
+    this.environment = environment;
+    this.background = skybox;
+    this.queueRender();
+  }
+
   /**
    * Sets the point in model coordinates the model should orbit/pivot around.
    */
@@ -509,7 +508,7 @@ export class ModelScene extends Scene {
    * Gets the point in model coordinates the model should orbit/pivot around.
    */
   getTarget(): Vector3 {
-    return vector3.copy(this.goalTarget).multiplyScalar(-1);
+    return this.goalTarget.multiplyScalar(-1).clone();
   }
 
   /**
@@ -647,7 +646,7 @@ export class ModelScene extends Scene {
       const action = this.mixer.clipAction(animationClip, this);
       this.currentAnimationAction = action;
 
-      if ((this.element as any).paused) {
+      if (this.element.paused) {
         this.mixer.stopAllAction();
       } else {
         action.paused = false;
@@ -693,8 +692,7 @@ export class ModelScene extends Scene {
   updateShadow() {
     const shadow = this.shadow;
     if (shadow != null) {
-      const side =
-          (this.element as any).arPlacement === 'wall' ? 'back' : 'bottom';
+      const side = this.element.arPlacement === 'wall' ? 'back' : 'bottom';
       shadow.setScene(this, this.shadowSoftness, side);
       shadow.needsUpdate = true;
     }
@@ -728,8 +726,7 @@ export class ModelScene extends Scene {
     }
 
     if (this.shadow == null) {
-      const side =
-          (this.element as any).arPlacement === 'wall' ? 'back' : 'bottom';
+      const side = this.element.arPlacement === 'wall' ? 'back' : 'bottom';
       this.shadow = new Shadow(this, this.shadowSoftness, side);
     }
     this.shadow.setIntensity(shadowIntensity);
@@ -774,7 +771,8 @@ export class ModelScene extends Scene {
     this.raycaster.setFromCamera(ndcPosition, this.getCamera());
     const hits = this.raycaster.intersectObject(object, true);
 
-    const hit = hits.find((hit) => !hit.object.userData.shadow);
+    const hit =
+        hits.find((hit) => hit.object.visible && !hit.object.userData.shadow);
     if (hit == null || hit.face == null) {
       return null;
     }

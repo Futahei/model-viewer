@@ -205,8 +205,9 @@ export declare interface TextureInfo {
   readonly texture: Texture|null;
 
   /**
-   * Sets a texture on the texture info, or removes the texture if argument is
-   * null.
+   * Sets the texture, or removes it if argument is null. Note you cannot build
+   * your own Texture object, but must either use one from another TextureInfo,
+   * or create one with the createTexture method.
    */
   setTexture(texture: Texture|null): void;
 }
@@ -314,12 +315,6 @@ export declare interface Image {
    * The bufferView of the image, if it is embedded.
    */
   readonly bufferView?: number
-
-  /**
-   * Configure the URI of the image. If a URI is specified for an otherwise
-   * embedded image, the URI will take precedence over an embedded buffer.
-   */
-  setURI(uri: string): Promise<void>;
 
   /**
    * A method to create an object URL of this image at the desired
