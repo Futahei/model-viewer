@@ -69,6 +69,7 @@ export class ModelScene extends Scene {
   public width = 1;
   public height = 1;
   public aspect = 1;
+  public scaleStep = 0;
   public renderCount = 0;
   public externalRenderer: RendererInterface|null = null;
 
@@ -166,6 +167,11 @@ export class ModelScene extends Scene {
 
   hasRendered() {
     this.isDirty = false;
+  }
+
+  forceRescale() {
+    this.scaleStep = -1;
+    this.queueRender();
   }
 
   /**
@@ -508,8 +514,7 @@ export class ModelScene extends Scene {
    * Gets the point in model coordinates the model should orbit/pivot around.
    */
   getTarget(): Vector3 {
-    // return this.goalTarget.multiplyScalar(-1).clone(); // fix for target bug
-    return vector3.copy(this.goalTarget).multiplyScalar(-1);
+    return this.goalTarget.clone().multiplyScalar(-1);
   }
 
   /**
