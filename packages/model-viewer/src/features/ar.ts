@@ -32,7 +32,7 @@ export type ARMode = 'quick-look'|'scene-viewer'|'webxr'|'none';
 const deserializeARModes = enumerationDeserializer<ARMode>(
     ['quick-look', 'scene-viewer', 'webxr', 'none']);
 
-const DEFAULT_AR_MODES = 'webxr scene-viewer';
+const DEFAULT_AR_MODES = 'webxr scene-viewer quick-look';
 
 const ARMode: {[index: string]: ARMode} = {
   QUICK_LOOK: 'quick-look',
@@ -411,9 +411,11 @@ configuration or device capabilities');
 
       await this[$triggerLoad]();
 
-      const scene = this[$scene];
+      const {model, shadow} = this[$scene];
+      if (model == null) {
+        return '';
+      }
 
-      const shadow = scene.shadow;
       let visible = false;
 
       // Remove shadow from export
@@ -425,7 +427,7 @@ configuration or device capabilities');
       updateSourceProgress(0.2);
 
       const exporter = new USDZExporter();
-      const arraybuffer = await exporter.parse(scene.modelContainer);
+      const arraybuffer = await exporter.parse(model);
       const blob = new Blob([arraybuffer], {
         type: 'model/vnd.usdz+zip',
       });

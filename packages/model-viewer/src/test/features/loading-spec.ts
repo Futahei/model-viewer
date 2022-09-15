@@ -53,16 +53,11 @@ suite('Loading', () => {
 
   test('does not load when hidden from render tree', async () => {
     let loadDispatched = false;
-    let preloadDispatched = false;
     const loadHandler = () => {
       loadDispatched = true;
     };
-    const preloadHandler = () => {
-      preloadDispatched = true;
-    };
 
     element.addEventListener('load', loadHandler);
-    element.addEventListener('preload', preloadHandler);
 
     element.style.display = 'none';
 
@@ -75,15 +70,15 @@ suite('Loading', () => {
     await timePasses(500);  // Arbitrary time to allow model to load
 
     element.removeEventListener('load', loadHandler);
-    element.removeEventListener('preload', preloadHandler);
 
     expect(loadDispatched).to.be.false;
-    expect(preloadDispatched).to.be.false;
   });
 
   suite('load', () => {
     suite('when a model src changes after loading', () => {
       setup(async () => {
+        // The shadow is here to expose an earlier bug on unloading models.
+        element.shadowIntensity = 1;
         element.src = CUBE_GLB_PATH;
         await waitForEvent(element, 'poster-dismissed');
       });
@@ -121,6 +116,24 @@ suite('Loading', () => {
         expect(size.z).to.be.eq(1);
       });
 
+      test('models are unloaded after src updates', async () => {
+        element.src = HORSE_GLB_PATH;
+        await waitForEvent(element, 'load');
+
+        const {shadow, model, target} = element[$scene];
+        const {children} = target;
+        expect(children.length).to.be.eq(2, 'horse');
+        expect(children).to.contain(shadow, 'horse shadow');
+        expect(children).to.contain(model, 'horse model');
+
+        element.src = CUBE_GLB_PATH;
+        await waitForEvent(element, 'load');
+        const {children: children2} = target;
+        expect(children2.length).to.be.eq(2, 'cube');
+        expect(children2).to.contain(shadow, 'cube shadow');
+        expect(children2).to.contain(element[$scene].model, 'cube model');
+      });
+
       test('generates 3DModel schema', async () => {
         element.generateSchema = true;
         await element.updateComplete;
@@ -142,29 +155,22 @@ suite('Loading', () => {
 
   suite('loading', () => {
     suite('src changes quickly', () => {
-      test('eventually notifies that current src is preloaded', async () => {
+      test('eventually notifies that current src is loaded', async () => {
         element.loading = 'eager';
         element.src = CUBE_GLB_PATH;
 
-        await timePasses();
+        const loadCubeEvent =
+            waitForEvent(element, 'load') as Promise<CustomEvent>;
 
-        let preloadEvent = null;
-        const onPreload = (event: CustomEvent) => {
-          if (event.detail.url === HORSE_GLB_PATH) {
-            preloadEvent = event;
-          }
-        };
-        element.addEventListener<any>('preload', onPreload);
+        await timePasses();
 
         element.src = HORSE_GLB_PATH;
 
-        await until(() => element.loaded);
+        const loadCube = await loadCubeEvent;
+        const loadHorse = await waitForEvent(element, 'load') as CustomEvent;
 
-        await timePasses();
-
-        element.removeEventListener<any>('preload', onPreload);
-
-        expect(preloadEvent).to.be.ok;
+        expect(loadCube.detail.url).to.be.eq(CUBE_GLB_PATH);
+        expect(loadHorse.detail.url).to.be.eq(HORSE_GLB_PATH);
       });
     });
 
