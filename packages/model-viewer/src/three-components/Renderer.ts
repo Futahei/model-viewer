@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import {ACESFilmicToneMapping, Event, EventDispatcher, sRGBEncoding, WebGLRenderer} from 'three';
+import {ACESFilmicToneMapping, Event, EventDispatcher, sRGBEncoding, Vector2, WebGLRenderer} from 'three';
 
 import {$updateEnvironment} from '../features/environment.js';
 import {ModelViewerGlobalConfig} from '../features/loading.js';
@@ -176,6 +176,11 @@ export class Renderer extends EventDispatcher {
     this.scenes.add(scene);
 
     scene.forceRescale();
+
+    const size = new Vector2();
+    this.threeRenderer.getSize(size);
+    scene.canvas.width = size.x;
+    scene.canvas.height = size.y;
 
     if (this.canRender && this.scenes.size > 0) {
       this.threeRenderer.setAnimationLoop(
@@ -369,10 +374,11 @@ export class Renderer extends EventDispatcher {
   }
 
   private copyPixels(scene: ModelScene, width: number, height: number) {
-    if (scene.context == null) {
-      scene.createContext();
+    const context2D = scene.context;
+    if (context2D == null) {
+      console.log('could not acquire 2d context');
+      return;
     }
-    const context2D = scene.context as CanvasRenderingContext2D;
     context2D.clearRect(0, 0, width, height);
     context2D.drawImage(
         this.canvas3D, 0, 0, width, height, 0, 0, width, height);
